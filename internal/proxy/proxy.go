@@ -55,14 +55,23 @@ if err != nil {
     http.Error(w, "bad gateway", http.StatusBadGateway)
     return  // important! stop here
 }
-	
+defer resp.Body.Close()
+
+	for key, values := range resp.Header {
+    for _, v := range values {
+        w.Header().Add(key, v)
+    }
+}
+
     // 6. Copy response status: w.WriteHeader(resp.StatusCode)
 	w.WriteHeader(resp.StatusCode)
 
     // 7. Copy response body: io.Copy(w, resp.Body)
 	io.Copy(w, resp.Body)
 
-    //    don't forget: defer resp.Body.Close()
-	defer resp.Body.Close()
+
 
 }
+
+
+func NewProxy(url string) 
