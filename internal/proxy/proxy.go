@@ -10,6 +10,12 @@ type proxy struct {
 	http *http.Client
 }
 
+func NewProxy (url string) *proxy{
+	return &proxy{
+		url : url,
+		http : &http.Client{},
+	}
+}
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     // 1. Build the backend URL: p.url + r.URL.Path
@@ -69,9 +75,6 @@ defer resp.Body.Close()
     // 7. Copy response body: io.Copy(w, resp.Body)
 	io.Copy(w, resp.Body)
 
-
-
 }
 
 
-func NewProxy(url string) 
