@@ -7,13 +7,13 @@ import (
 
 type proxy struct {
 	url string
-	http *http.Client
+	client  *http.Client
 }
 
 func NewProxy (url string) *proxy{
 	return &proxy{
 		url : url,
-		http : &http.Client{},
+		client  : &http.Client{},
 	}
 }
 
@@ -55,7 +55,7 @@ for key, values := range r.Header {
 }
     // 4. Send the request: p.http.Do(newReq)
     //    this returns (resp, err)
-     resp, err := p.http.Do(newReq)
+     resp, err := p.client .Do(newReq)
     // 5. Handle error: if err != nil, write 502 to w
 if err != nil {
     http.Error(w, "bad gateway", http.StatusBadGateway)
