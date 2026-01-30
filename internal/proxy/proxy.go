@@ -6,16 +6,17 @@ import (
     "time"
     "net"
     "context"
+    "github.com/G1D0/Api-Gateway/internal/lb"
 )
 
 type proxy struct {
-	url string
-	client  *http.Client
+	balancer lb.Balancer
+	client   *http.Client
 }
 
-func NewProxy(url string) *proxy {
+func NewProxy(balancer lb.Balancer) *proxy {
     return &proxy{
-        url: url,
+        balancer: balancer,
         client: &http.Client{
             
             Transport: &http.Transport{
@@ -34,7 +35,7 @@ func NewProxy(url string) *proxy {
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     // 1. Build the backend URL: p.url + r.URL.Path
     //    use: backendURL := p.url + r.URL.Path
-	backendURL := p.url + r.URL.Path
+	backendURL := p.balancer.Next() + r.URL.Path
     // Right after line 36 (backendURL), add:
     ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
     defer cancel()
