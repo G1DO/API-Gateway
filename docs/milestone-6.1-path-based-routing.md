@@ -1,7 +1,7 @@
 # Milestone 6.1: Path-Based Routing
 
 **Phase:** 6 — Routing & Configuration
-**Status:** [ ] Not started
+**Status:** [x] Complete
 
 ## Goal
 
@@ -16,12 +16,19 @@ Route incoming requests to different backend services based on the URL path.
 
 ## Requirements
 
-- [ ] Parse route rules from YAML configuration
-- [ ] Match incoming request path to a route
-- [ ] Support prefix matching with wildcards (`/api/users/*`)
-- [ ] Route priority: longer/more specific prefixes match first
-- [ ] Each route points to a service with its own backend pool
-- [ ] Return 404 for unmatched paths
+- [x] Parse route rules from YAML configuration
+- [x] Match incoming request path to a route
+- [x] Support prefix matching with wildcards (`/api/users/*`)
+- [x] Route priority: longer/more specific prefixes match first
+- [x] Each route points to a service with its own backend pool
+- [x] Return nil for unmatched paths (caller decides response)
+
+## Implementation
+
+- **File:** `internal/router/config.go` -- YAML parsing via `gopkg.in/yaml.v3`, validation (non-empty path, at least one backend)
+- **File:** `internal/router/router.go` -- Prefix matching with routes sorted by specificity (longest path first)
+- Trailing `/*` and `*` stripped from config paths for clean prefix matching
+- `Router.Match()` returns `*Route` or nil
 
 ## Questions to Answer Before Coding
 

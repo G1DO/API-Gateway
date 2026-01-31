@@ -1,7 +1,7 @@
 # Milestone 6.2: Header-Based Routing
 
 **Phase:** 6 — Routing & Configuration
-**Status:** [ ] Not started
+**Status:** [x] Complete
 
 ## Goal
 
@@ -16,11 +16,19 @@ Route requests based on HTTP headers, enabling virtual hosts, API versioning, an
 
 ## Requirements
 
-- [ ] Match routes by `Host` header (virtual hosts)
-- [ ] Match routes by custom headers
-- [ ] Combined path + header matching
-- [ ] Header matching supports exact match and presence check
-- [ ] YAML configuration for header-based routes
+- [x] Match routes by `Host` header (virtual hosts)
+- [x] Match routes by custom headers
+- [x] Combined path + header matching
+- [x] Header matching supports exact match and presence check (`"*"` = presence only)
+- [x] YAML configuration for header-based routes
+
+## Implementation
+
+- **File:** `internal/router/router.go` -- `matchHeaders()` checks all required headers
+- Header value `"*"` means presence check (any non-empty value matches)
+- Otherwise exact string match via `req.Header.Get(key)`
+- Routes with headers sort before routes without at the same path length (more specific first)
+- All specified headers must match (AND logic)
 
 ## Questions to Answer Before Coding
 

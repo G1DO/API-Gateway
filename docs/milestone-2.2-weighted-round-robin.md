@@ -1,7 +1,7 @@
 # Milestone 2.2: Weighted Round Robin
 
 **Phase:** 2 — Load Balancing
-**Status:** [ ] Not started
+**Status:** [x] Complete
 
 ## Goal
 

@@ -1,7 +1,7 @@
 # Milestone 2.4: Consistent Hashing
 
 **Phase:** 2 — Load Balancing
-**Status:** [ ] Not started
+**Status:** [x] Complete
 
 ## Goal
 

@@ -1,7 +1,7 @@
 # Milestone 5.2: Passive Health Checks
 
 **Phase:** 5 — Health Checking
-**Status:** [ ] Not started
+**Status:** [x] Complete
 
 ## Goal
 

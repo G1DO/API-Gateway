@@ -1,7 +1,7 @@
 # Milestone 1.3: Timeouts
 
 **Phase:** 1 — Reverse Proxy
-**Status:** [ ] Not started
+**Status:** [x] Complete
 
 ## Goal
 
