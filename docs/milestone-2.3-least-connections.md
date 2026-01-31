@@ -1,7 +1,7 @@
 # Milestone 2.3: Least Connections
 
 **Phase:** 2 — Load Balancing
-**Status:** [ ] Not started
+**Status:** [x] Complete
 
 ## Goal
 
