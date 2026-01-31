@@ -170,7 +170,10 @@ func TestProxyForwardsResponseHeaders(t *testing.T) {
 	frontend := httptest.NewServer(p)
 	defer frontend.Close()
 
-	resp, _ := http.Get(frontend.URL + "/")
+	resp, err := http.Get(frontend.URL + "/")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
