@@ -1,7 +1,7 @@
 # Milestone 3.3: Sliding Window
 
 **Phase:** 3 — Rate Limiting
-**Status:** [ ] Not started
+**Status:** [x] Complete
 
 ## Goal
 

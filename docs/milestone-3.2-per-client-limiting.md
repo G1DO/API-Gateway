@@ -1,7 +1,7 @@
 # Milestone 3.2: Per-Client Limiting
 
 **Phase:** 3 — Rate Limiting
-**Status:** [ ] Not started
+**Status:** [x] Complete
 
 ## Goal
 
