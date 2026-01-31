@@ -1,7 +1,7 @@
 # Milestone 2.1: Round Robin
 
 **Phase:** 2 — Load Balancing
-**Status:** [ ] Not started
+**Status:** [x] Complete
 
 ## Goal
 

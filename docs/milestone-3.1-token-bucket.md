@@ -1,7 +1,7 @@
 # Milestone 3.1: Token Bucket Algorithm
 
 **Phase:** 3 — Rate Limiting
-**Status:** [ ] Not started
+**Status:** [x] Complete
 
 ## Goal
 
