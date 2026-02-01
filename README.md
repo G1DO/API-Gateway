@@ -1,151 +1,188 @@
 # API Gateway
 
-A production-grade API gateway built from scratch in Go. Not an nginx wrapper — implementing the core primitives (reverse proxy, load balancing, rate limiting, circuit breakers) to understand what happens between clients and backends.
+A production-grade API gateway built from scratch in Go using only the standard library. No frameworks, no nginx — every component (reverse proxy, load balancing, rate limiting, circuit breaking, health checking, routing, observability) implemented from first principles.
 
-## The Problem
+## Why Build This?
 
-```
-Client ──HTTP──► Backend
-```
+Every request between a client and your backend needs:
+- **Traffic control** — rate limiting to prevent abuse
+- **Load distribution** — spreading requests across backends
+- **Fault tolerance** — circuit breakers to stop cascading failures
+- **Health awareness** — detecting and routing around unhealthy backends
+- **Observability** — metrics, logs, and traces to understand what's happening
 
-Works until the backend overloads, crashes, or gets abused. You need rate limiting, load distribution, health checking, and failure handling. You could add these to every service, or put a gateway in front.
-
-```
-                    ┌─────────────────────────────────────┐
-                    │           API GATEWAY               │
-                    │                                     │
-Client ──────────►  │  [Rate Limit] → [Route] → [LB]      │
-                    │                             │       │
-                    │              ┌──────────────┼────┐  │
-                    │              ▼              ▼    ▼  │
-                    │          Backend A    Backend B  C  │
-                    └─────────────────────────────────────┘
-```
+You can bolt these onto every microservice, or you can put a gateway in front. This project implements that gateway — not by configuring someone else's tool, but by building each primitive from scratch.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                          GATEWAY                            │
-│                                                             │
-│   Acceptor ──► Router ──► LB Pool                           │
-│                              │                              │
-│   Rate Limiter    Circuit Breaker ◄──┘                      │
-│                        │                                    │
-│                   Conn Pool                                 │
-│                        │                                    │
-└────────────────────────┼────────────────────────────────────┘
-                         │
-           ┌─────────────┼─────────────┐
-           ▼             ▼             ▼
-       Backend A     Backend B     Backend C
+                         ┌──────────────────────────────────────────────┐
+                         │                API GATEWAY                   │
+                         │                                              │
+  Client ─── HTTPS ────► │  Rate Limiter ──► Router ──► Load Balancer   │
+                         │                                     │        │
+                         │                          Circuit Breaker     │
+                         │                                     │        │
+                         │                    Health Checker ◄──┘        │
+                         │                                              │
+                         │  ┌─────────────────────────────────────┐     │
+                         │  │  Observability (Metrics/Logs/Traces) │     │
+                         │  └─────────────────────────────────────┘     │
+                         └──────────────┬───────────┬──────────────────┘
+                                        │           │
+                              ┌─────────┼─────────┐ │
+                              ▼         ▼         ▼ ▼
+                          Backend A  Backend B  Backend C
 ```
 
-## Tech Stack
+**Request flow:**
+1. Rate limiter checks if the client is within their allowed request budget
+2. Router matches the request path and headers to a backend group
+3. Load balancer picks a specific backend using the configured strategy
+4. Circuit breaker decides whether to allow or fast-fail the request
+5. Health checker feeds status back so unhealthy backends are skipped
+6. Observability records metrics, structured logs, and trace IDs throughout
 
-- **Language:** Go
-- **HTTP:** `net/http` standard library
-- **Configuration:** YAML (hot-reloadable)
-- **Metrics:** Prometheus format
-- **Logging:** Structured JSON
+## What's Inside
 
-## Milestones
+### Reverse Proxy (`internal/proxy`)
 
-### Phase 1: Reverse Proxy
+Forwards HTTP requests to backends with connection pooling. Strips hop-by-hop headers, copies request/response bodies, and returns 502 on backend failure.
 
-| Milestone | Description | Status |
-|-----------|-------------|--------|
-| [1.1 — Basic Proxy](docs/milestone-1.1-basic-proxy.md) | Forward requests to a single backend | [x] |
-| [1.2 — Connection Pooling](docs/milestone-1.2-connection-pooling.md) | Reuse TCP connections to backends | [x] |
-| [1.3 — Timeouts](docs/milestone-1.3-timeouts.md) | Connection, request, and idle timeouts | [x] |
+- Connection pooling via `http.Transport` (100 idle conns, 90s idle timeout)
+- 5s dial timeout, 30s request timeout via context
+- Hop-by-hop header stripping (Connection, Keep-Alive, Proxy-Authenticate, etc.)
 
-### Phase 2: Load Balancing
+### Load Balancing (`internal/lb`)
 
-| Milestone | Description | Status |
-|-----------|-------------|--------|
-| [2.1 — Round Robin](docs/milestone-2.1-round-robin.md) | Sequential rotation across backends | [x] |
-| [2.2 — Weighted Round Robin](docs/milestone-2.2-weighted-round-robin.md) | Proportional traffic by backend weight | [x] |
-| [2.3 — Least Connections](docs/milestone-2.3-least-connections.md) | Route to least-loaded backend | [x] |
-| [2.4 — Consistent Hashing](docs/milestone-2.4-consistent-hashing.md) | Sticky sessions via hash ring | [x] |
+Four strategies behind a single `Balancer` interface (`Next() string`):
 
-### Phase 3: Rate Limiting
+| Strategy | How It Works | When to Use |
+|----------|-------------|-------------|
+| **Round Robin** | Sequential rotation with atomic counter | Equal backends, stateless requests |
+| **Weighted Round Robin** | Nginx's smooth weighted algorithm — spreads proportionally without bursting | Backends with different capacities |
+| **Least Connections** | Tracks active connections per backend with `atomic.Int64`, picks lowest | Variable request durations |
+| **Consistent Hashing** | CRC32 hash ring with virtual nodes, binary search lookup | Sticky sessions, cache affinity |
 
-| Milestone | Description | Status |
-|-----------|-------------|--------|
-| [3.1 — Token Bucket](docs/milestone-3.1-token-bucket.md) | Token bucket rate limiting algorithm | [x] |
-| [3.2 — Per-Client Limiting](docs/milestone-3.2-per-client-limiting.md) | Separate limits per client | [x] |
-| [3.3 — Sliding Window](docs/milestone-3.3-sliding-window.md) | Sliding window alternative | [x] |
+### Rate Limiting (`internal/ratelimit`)
 
-### Phase 4: Circuit Breaker
+Three algorithms to control traffic:
 
-| Milestone | Description | Status |
-|-----------|-------------|--------|
-| [4.1 — State Machine](docs/milestone-4.1-circuit-breaker-state-machine.md) | Closed/Open/Half-Open circuit breaker | [x] |
-| [4.2 — Per-Backend Circuits](docs/milestone-4.2-per-backend-circuits.md) | Isolated circuit per backend | [x] |
+| Algorithm | How It Works | Trade-off |
+|-----------|-------------|-----------|
+| **Token Bucket** | Lazy refill — calculates accrued tokens on each `Allow()` call instead of a background ticker | Allows bursts up to capacity, then enforces sustained rate |
+| **Per-Client** | Separate token bucket per client key with background GC for stale buckets | Memory grows with unique clients, GC keeps it bounded |
+| **Sliding Window** | Weighted combination of previous + current window counts, constant memory | Smoother than fixed windows, prevents double-burst at boundaries |
 
-### Phase 5: Health Checking
+All return `(ok bool, retryAfter time.Duration)` — the caller knows exactly when to retry.
 
-| Milestone | Description | Status |
-|-----------|-------------|--------|
-| [5.1 — Active Health Checks](docs/milestone-5.1-active-health-checks.md) | Periodic backend probing | [x] |
-| [5.2 — Passive Health Checks](docs/milestone-5.2-passive-health-checks.md) | Infer health from real traffic | [x] |
-| [5.3 — Graceful Degradation](docs/milestone-5.3-graceful-degradation.md) | Auto-remove/reintroduce backends | [x] |
+### Circuit Breaker (`internal/circuitbreaker`)
 
-### Phase 6: Routing & Configuration
+Prevents cascading failures with a three-state machine:
 
-| Milestone | Description | Status |
-|-----------|-------------|--------|
-| [6.1 — Path-Based Routing](docs/milestone-6.1-path-based-routing.md) | Route by URL path | [x] |
-| [6.2 — Header-Based Routing](docs/milestone-6.2-header-based-routing.md) | Route by Host/custom headers | [x] |
-| [6.3 — Hot Reload](docs/milestone-6.3-hot-reload.md) | Apply config changes without restart | [x] |
+```
+         requests succeed
+              ┌───┐
+              ▼   │
+ ┌────────────────────┐     max failures     ┌────────────┐
+ │      CLOSED        │ ──────────────────►  │    OPEN     │
+ │  (allow requests)  │                      │ (reject all)│
+ └────────────────────┘                      └──────┬──────┘
+              ▲                                     │
+              │          timeout expires            │
+              │                                     ▼
+              │                            ┌──────────────┐
+              └─────── success ──────────  │  HALF-OPEN   │
+                                           │ (test 1 req) │
+                        failure ──────────►└──────────────┘
+                        (back to OPEN)
+```
 
-### Phase 7: Observability
+- Fast reads via `atomic.Uint32`, writes protected by mutex
+- `PerBackend` manager: isolated circuit per backend address, lazy initialization with double-checked locking
 
-| Milestone | Description | Status |
-|-----------|-------------|--------|
-| [7.1 — Metrics](docs/milestone-7.1-metrics.md) | Prometheus metrics endpoint | [ ] |
-| [7.2 — Structured Logging](docs/milestone-7.2-structured-logging.md) | JSON-formatted request logs | [ ] |
-| [7.3 — Request Tracing](docs/milestone-7.3-request-tracing.md) | Trace ID propagation | [ ] |
+### Health Checking (`internal/health`)
+
+Two complementary approaches combined with AND logic:
+
+- **Active** — periodic HTTP probes to a configurable health endpoint. Tracks consecutive successes/failures to prevent flapping
+- **Passive** — infers health from real traffic using a sliding time window. Marks unhealthy when error rate exceeds threshold (with minimum request count)
+- **Combined** — backend is healthy only if both active AND passive agree. Active catches idle failures, passive catches under-load failures
+- **Pool** — filters unhealthy backends from the load balancer's selection
+
+### Routing (`internal/router`)
+
+Path and header-based request routing with hot reload:
+
+- **Config** — YAML parser with validation for route definitions (prefix paths, header matchers, backend lists)
+- **Router** — prefix matching sorted by specificity (longest path first, header routes before wildcard)
+- **Hot Reload** — polls config file for changes, parses new config, swaps router atomically via `atomic.Value`. Invalid configs are rejected — previous router stays active
+
+### Observability (`internal/observe`)
+
+Production instrumentation with zero external dependencies beyond Prometheus client:
+
+- **Metrics** — 6 Prometheus metric types: request count, latency histogram (5ms–10s buckets), backend health, rate limit hits, circuit breaker state, active connections. Exposed on `/metrics`
+- **Logging** — structured JSON via `log/slog` with request-scoped context (method, path, client IP, trace ID)
+- **Tracing** — 128-bit hex trace IDs from `crypto/rand`, propagated via `X-Request-ID` header. Reuses client-provided IDs when present
 
 ## Project Structure
 
 ```
 api/
-├── cmd/gateway/main.go              # Entry point
+├── cmd/gateway/
+│   └── main.go                        # Entry point
 ├── internal/
 │   ├── proxy/
-│   │   ├── proxy.go                 # Reverse proxy with connection pooling + timeouts
+│   │   ├── proxy.go                   # Reverse proxy with connection pooling
 │   │   └── proxy_test.go
 │   ├── lb/
-│   │   ├── lb.go                    # Round-robin load balancer
-│   │   ├── wrr.go                   # Smooth weighted round-robin
-│   │   ├── leastconn.go             # Least-connections
-│   │   ├── consistenthash.go        # Consistent hashing (hash ring)
+│   │   ├── lb.go                      # Balancer interface + round robin
+│   │   ├── wrr.go                     # Smooth weighted round robin
+│   │   ├── leastconn.go               # Least connections
+│   │   ├── consistenthash.go          # Consistent hashing with virtual nodes
 │   │   └── lb_test.go
 │   ├── ratelimit/
-│   │   ├── tokenbucket.go           # Token bucket algorithm
-│   │   ├── perclient.go             # Per-client rate limiter with eviction
-│   │   ├── slidingwindow.go         # Sliding window counter
+│   │   ├── tokenbucket.go             # Token bucket (lazy refill)
+│   │   ├── perclient.go              # Per-client limiter with GC
+│   │   ├── slidingwindow.go           # Sliding window counter
 │   │   └── ratelimit_test.go
 │   ├── circuitbreaker/
-│   │   ├── circuitbreaker.go        # State machine (closed/open/half-open)
-│   │   ├── perbackend.go            # Per-backend circuit breaker manager
+│   │   ├── circuitbreaker.go          # State machine (closed/open/half-open)
+│   │   ├── perbackend.go             # Per-backend circuit isolation
 │   │   └── circuitbreaker_test.go
 │   ├── health/
-│   │   ├── active.go                # Periodic health probing
-│   │   ├── passive.go               # Infer health from traffic
-│   │   ├── combined.go              # Active + passive combined
-│   │   ├── pool.go                  # Backend pool management
+│   │   ├── active.go                  # Periodic probe-based health checks
+│   │   ├── passive.go                 # Traffic-inferred health checks
+│   │   ├── combined.go               # AND-logic combined checker
+│   │   ├── pool.go                    # Healthy backend pool filtering
 │   │   └── health_test.go
-│   └── router/
-│       ├── config.go                # YAML config parsing + validation
-│       ├── router.go                # Prefix-based routing with header matching
-│       ├── reload.go                # Hot config reloader (polling + atomic swap)
-│       └── router_test.go
-├── docs/                            # Milestone documentation
+│   ├── router/
+│   │   ├── config.go                  # YAML route config parser
+│   │   ├── router.go                  # Prefix + header matching
+│   │   ├── reload.go                  # Hot reload with atomic swap
+│   │   └── router_test.go
+│   └── observe/
+│       ├── metrics.go                 # Prometheus metrics
+│       ├── logging.go                 # Structured JSON logging
+│       ├── tracing.go                 # Request ID generation + propagation
+│       └── observe_test.go
+├── docs/                              # Milestone documentation (21 files)
 ├── go.mod
-└── README.md
+└── go.sum
 ```
+
+## Design Decisions
+
+**Zero external dependencies (except Prometheus client)** — every algorithm implemented from scratch using Go's standard library. This is intentional: the goal is understanding, not shipping fast.
+
+**Interfaces over concrete types** — `lb.Balancer` is a single-method interface (`Next() string`). Any load balancing strategy plugs in without changing the proxy.
+
+**Atomic operations for hot paths** — round robin uses `atomic.AddUint64`, circuit breaker reads state via `atomic.Uint32`, router swaps via `atomic.Value`. Mutexes only where writes need coordination.
+
+**Lazy initialization everywhere** — token buckets refill on-demand (no background ticker), per-client limiters create buckets on first request, per-backend circuit breakers create on first access. No work until needed.
+
+**Concurrency safety as a requirement, not an afterthought** — every component is safe for concurrent use. Tests include concurrent access scenarios.
 
 ## Building & Running
 
@@ -153,9 +190,21 @@ api/
 # Build
 go build -o gateway cmd/gateway/main.go
 
-# Run (currently starts with hardcoded backends on :9000)
-./gateway
-
 # Run tests
 go test ./...
+
+# Run
+./gateway -config config/gateway.yaml
 ```
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Language | Go 1.25 |
+| HTTP | `net/http` standard library |
+| Configuration | YAML (hot-reloadable) |
+| Metrics | Prometheus client |
+| Logging | `log/slog` (structured JSON) |
+| Tracing | `X-Request-ID` header propagation |
+| External deps | Prometheus client library only |
